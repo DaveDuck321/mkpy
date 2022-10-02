@@ -1,5 +1,6 @@
 import multiprocessing
 import re
+import time
 
 from collections import defaultdict
 from enum import Enum
@@ -152,7 +153,12 @@ def worker_thread(top_level: Node):
     while True:
         try:
             next_node = get_next_node_to_build(top_level)
+        except MakeBlockedException:
+            # Start polling: further work is blocked until another worker finishes
+            time.sleep(0)
+            continue
         except MakeFinishedException:
+            # Terminal case: someone else is dealing with the top_level target
             break
 
         target_states[next_node.name] = MakeState.CURRENTLY_MAKING
