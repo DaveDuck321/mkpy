@@ -164,7 +164,13 @@ def worker_thread(top_level: Node):
         target_states[next_node.name] = MakeState.CURRENTLY_MAKING
 
         # TODO: check timestamps when appropriate
-        next_node.recipe(next_node.name, next_node.depends, next_node.prerequisites)
+
+        def get_node_names(nodes: list[Node]):
+            return list(map(lambda node: node.name, nodes))
+
+        depends = get_node_names(next_node.depends)
+        prerequisites = get_node_names(next_node.prerequisites)
+        next_node.recipe(next_node.name, depends, prerequisites)
 
         target_states[next_node.name] = MakeState.FINISHED_MAKING
 
