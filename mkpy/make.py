@@ -6,6 +6,7 @@ import time
 from collections import defaultdict
 from enum import Enum
 from functools import partial
+from pathlib import Path
 from threading import Thread
 from typing import Callable, Mapping, NamedTuple
 
@@ -83,6 +84,12 @@ def target_phony(name: str, depends: list[str] = [], prerequisites: list[str] = 
     return lambda recipe: target(recipe, name, depends, prerequisites, True)
 
 
+def source_file_recipe(target, depends, prerequisites):
+    assert len(depends) == 0
+    assert len(prerequisites) == 0
+    assert Path(target).exists()
+
+
 def generate_dependency_graph(
     target_name: str, satisfied_targets: set[str], is_prerequisite: bool = False
 ) -> Node:
@@ -120,7 +127,19 @@ def generate_dependency_graph(
                 last_missing_target = missing_target
 
     if top_level is None:
-        raise last_missing_target or MissingTargetException(target_name)
+        # The graph cannot be generated: a special case is needed for pre-existing source files
+        # TODO: should the user manually specify which files are source files?
+        if not Path(target_name).exists():
+            raise last_missing_target or MissingTargetException(target_name)
+
+        return Node(
+            target_name,
+            rule.requirements.is_phony,
+            is_prerequisite,
+            source_file_recipe,
+            [],
+            [],
+        )
 
     return top_level
 
