@@ -1,3 +1,4 @@
+import inspect
 import multiprocessing
 import re
 import time
@@ -57,8 +58,21 @@ def target(
     prerequisites: list[str],
     is_phony: bool,
 ):
+    # Make rules can have a variable number of arguments
+    parameters = len(inspect.signature(recipe).parameters)
+    if parameters == 0:
+        normalized_recipe = lambda _1, _2, _3: recipe()
+    elif parameters == 1:
+        normalized_recipe = lambda target, _2, _3: recipe(target)
+    elif parameters == 2:
+        normalized_recipe = lambda target, depends, _3: recipe(target, depends)
+    elif parameters == 3:
+        normalized_recipe = recipe
+    else:
+        raise AttributeError(f"Too many arguments for rule body: '{name}'")
+
     requirements = Requirements(depends, prerequisites, is_phony)
-    rules.append(Rule(re.compile(name), recipe, requirements))
+    rules.append(Rule(re.compile(name), normalized_recipe, requirements))
 
 
 def target_output(name: str, depends: list[str] = [], prerequisites: list[str] = []):
