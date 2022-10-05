@@ -1,5 +1,4 @@
 import inspect
-import multiprocessing
 import re
 import time
 
@@ -212,11 +211,11 @@ def worker_thread(top_level: Node):
         target_states[next_node.name] = MakeState.FINISHED_MAKING
 
 
-def make(target_name, thread_count=multiprocessing.cpu_count()):
+def run_make(target_name, job_count):
     graph = generate_dependency_graph(target_name, satisfied_targets=set())
 
     thread_pool: list[Thread] = []
-    for _ in range(thread_count):
+    for _ in range(job_count):
         thread_pool.append(Thread(target=partial(worker_thread, graph)))
 
     for thread in thread_pool:
