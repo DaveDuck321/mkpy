@@ -5,7 +5,7 @@ import os
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pathlib import Path
 
-from .make import MKPY_Exception, run_make
+from .make import MKPY_Exception, MakefileUsageException, run_make
 from .util import exit_with_error_message, log_message
 
 parser = ArgumentParser(
@@ -26,14 +26,19 @@ try:
     if hasattr(args, "directory"):
         os.chdir(args.directory)
         log_message(f"Entering directory '{args.directory}'")
-except:
-    exit_with_error_message(f"Cannot enter directory '{args.directory}'")
+except FileNotFoundError as exception:
+    exit_with_error_message(f"Cannot enter directory '{exception.filename}'")
+
+try:
+    makefile_content = args.file.read_text()
+except FileNotFoundError as exception:
+    exit_with_error_message(f"Cannot open makefile '{exception.filename}'")
 
 try:
     # Note: Exec is necessary: Python importlib doesn't work after an os.chdir
     #   This also avoids generating a garbage __pycache__
-    exec(args.file.read_text())
-except FileNotFoundError as exception:
+    exec(makefile_content)
+except MKPY_Exception as exception:
     exit_with_error_message(exception)
 
 try:

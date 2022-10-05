@@ -35,6 +35,10 @@ class MKPY_Exception(Exception):
     pass
 
 
+class MakefileUsageException(MKPY_Exception):
+    pass
+
+
 class MissingTargetException(MKPY_Exception):
     def __init__(self, target_name) -> None:
         super().__init__(f"No rule for target: '{target_name}'")
@@ -73,7 +77,7 @@ def target(
     elif parameters == 3:
         normalized_recipe = recipe
     else:
-        raise AttributeError(f"Too many arguments for rule body: '{name}'")
+        raise MakefileUsageException(f"Too many arguments for rule body: '{name}'")
 
     requirements = Requirements(depends, prerequisites, is_phony)
     rules.append(Rule(re.compile(name), normalized_recipe, requirements))
