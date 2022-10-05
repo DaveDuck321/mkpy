@@ -32,17 +32,21 @@ class Node(NamedTuple):
     prerequisites: list["Node"]
 
 
-class MissingTargetException(Exception):
+class MKPY_Exception(Exception):
+    pass
+
+
+class MissingTargetException(MKPY_Exception):
     def __init__(self, target_name) -> None:
         super().__init__(f"No rule for target: '{target_name}'")
 
 
-class DuplicateTargetException(Exception):
+class DuplicateTargetException(MKPY_Exception):
     def __init__(self, target_name) -> None:
         super().__init__(f"Multiple matching definitions for target: '{target_name}'")
 
 
-class CircularDependencyException(Exception):
+class CircularDependencyException(MKPY_Exception):
     def __init__(self, target_name, depend_name) -> None:
         super().__init__(
             f"A circular dependency is formed: target '{target_name}' depends on ancestor '{depend_name}'"
@@ -144,11 +148,11 @@ def generate_dependency_graph(
     return top_level
 
 
-class MakeBlockedException(Exception):
+class MakeBlockedException(MKPY_Exception):
     pass
 
 
-class MakeFinishedException(Exception):
+class MakeFinishedException(MKPY_Exception):
     pass
 
 
