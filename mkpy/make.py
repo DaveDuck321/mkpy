@@ -1,6 +1,8 @@
 import inspect
 import re
+import threading
 import time
+import traceback
 
 from collections import defaultdict
 from enum import Enum
@@ -8,6 +10,8 @@ from functools import partial
 from pathlib import Path
 from threading import Thread
 from typing import Callable, Mapping, NamedTuple
+
+from .util import trim_library_code_from_traceback
 
 
 class Requirements(NamedTuple):
@@ -189,8 +193,11 @@ def get_next_node_to_build(top_level: Node):
     return top_level
 
 
+has_any_worker_thrown_an_exception = False
+
+
 def worker_thread(top_level: Node):
-    while True:
+    while not has_any_worker_thrown_an_exception:
         try:
             next_node = get_next_node_to_build(top_level)
         except MakeBlockedException:
@@ -218,6 +225,15 @@ def worker_thread(top_level: Node):
 def run_make(target_name, job_count):
     graph = generate_dependency_graph(target_name, satisfied_targets=set())
 
+    def except_hook(args):
+        global has_any_worker_thrown_an_exception
+        has_any_worker_thrown_an_exception = True
+        tb = trim_library_code_from_traceback(args.exc_traceback)
+
+        traceback.print_exception(args.exc_type, args.exc_value, tb)
+
+    threading.excepthook = except_hook
+
     thread_pool: list[Thread] = []
     for _ in range(job_count):
         thread_pool.append(Thread(target=partial(worker_thread, graph)))
@@ -227,3 +243,6 @@ def run_make(target_name, job_count):
 
     for thread in thread_pool:
         thread.join()
+
+    if has_any_worker_thrown_an_exception:
+        raise MKPY_Exception("Exception thrown in worker")
