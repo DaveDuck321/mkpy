@@ -1,24 +1,29 @@
+import argparse
 import multiprocessing
 import os
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from pathlib import Path
 
 from .make import MKPY_Exception, run_make
 from .util import exit_with_error_message, log_message
 
+parser = ArgumentParser(
+    "mkpy",
+    description="Kinda like GNU-Make without the archaic scripting language (but with the cool copy-left 😎)",
+    formatter_class=ArgumentDefaultsHelpFormatter,
+)
 # fmt: off
-parser = ArgumentParser("mkpy", description="GNU-make without the archaic scripting language")
 parser.add_argument("target", type=str, default="default", nargs="?", help="target to make")
 parser.add_argument("--file", "-f", type=Path, default=Path("makefile.py"), help="the makefile to run")
 parser.add_argument("--jobs", "-j", metavar="N", type=int, default=multiprocessing.cpu_count(), help="allow N jobs at once")
-parser.add_argument("--directory", "-C", type=Path, help="change to DIRECTORY before running makefile")
+parser.add_argument("--directory", "-C", type=Path, default=argparse.SUPPRESS, help="change to DIRECTORY before running makefile")
 # fmt: on
 
 args = parser.parse_args()
 
 try:
-    if args.directory is not None:
+    if hasattr(args, "directory"):
         os.chdir(args.directory)
         log_message(f"Entering directory '{args.directory}'")
 except:
