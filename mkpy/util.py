@@ -1,7 +1,8 @@
+import subprocess
 import sys
 
-from types import TracebackType
 from pathlib import Path
+from types import TracebackType
 
 mkpy_path = Path(__file__).parent
 
@@ -19,6 +20,11 @@ def trim_library_code_from_traceback(
         return trim_library_code_from_traceback(traceback.tb_next, True)
 
     return trim_library_code_from_traceback(traceback.tb_next, has_left_python_library)
+
+
+def sh(command: str):
+    print(command)
+    subprocess.check_call(command, shell=True)
 
 
 def log_message(message: str):
