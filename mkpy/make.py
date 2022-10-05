@@ -5,6 +5,7 @@ import time
 import traceback
 
 from collections import defaultdict
+from collections.abc import Iterable
 from enum import Enum
 from functools import partial
 from pathlib import Path
@@ -42,6 +43,13 @@ class MakefileUsageException(MKPY_Exception):
     pass
 
 
+class PhonyUsageException(MakefileUsageException):
+    def __init__(self, target_name) -> None:
+        super().__init__(
+            f"Rule for target '{target_name}' did not produce the expected file, consider using '@target_phony'"
+        )
+
+
 class MissingTargetException(MKPY_Exception):
     def __init__(self, target_name) -> None:
         super().__init__(f"No rule for target: '{target_name}'")
@@ -62,7 +70,7 @@ class CircularDependencyException(MKPY_Exception):
 rules: list[Rule] = []
 
 
-def target(
+def single_target(
     recipe: Callable,
     name: str,
     depends: list[str],
@@ -82,8 +90,32 @@ def target(
     else:
         raise MakefileUsageException(f"Too many arguments for rule body: '{name}'")
 
-    requirements = Requirements(depends, prerequisites, is_phony)
+    requirements = Requirements([*depends], [*prerequisites], is_phony)
     rules.append(Rule(re.compile(name), normalized_recipe, requirements))
+
+
+def target(
+    recipe: Callable | list[Callable],
+    name: str,
+    depends: list[str],
+    prerequisites: list[str],
+    is_phony: bool,
+):
+    if isinstance(depends, str):
+        raise MakefileUsageException(
+            f"Dependency list must not be a string: did you mean ['{depends}']?"
+        )
+
+    if isinstance(prerequisites, str):
+        raise MakefileUsageException(
+            f"Prerequisite list must not be a string: did you mean ['{prerequisites}']?"
+        )
+
+    if isinstance(recipe, Iterable):
+        for item in recipe:
+            target(item, name, depends, prerequisites, is_phony)
+    else:
+        single_target(recipe, name, depends, prerequisites, is_phony)
 
 
 def target_output(name: str, depends: list[str] = [], prerequisites: list[str] = []):
@@ -172,7 +204,6 @@ target_states: Mapping[str, MakeState] = defaultdict(lambda: MakeState.NOT_YET_M
 
 
 def get_next_node_to_build(top_level: Node):
-    # Note: GIL abuse
     if target_states[top_level.name] != MakeState.NOT_YET_MADE:
         raise MakeFinishedException()
 
@@ -194,6 +225,18 @@ def get_next_node_to_build(top_level: Node):
 
 dependency_graph_lock = threading.Lock()
 has_any_worker_thrown_an_exception = False
+worker_mkpy_exception = None
+
+
+def except_hook(args: threading.ExceptHookArgs):
+    global has_any_worker_thrown_an_exception, worker_mkpy_exception
+    has_any_worker_thrown_an_exception = True
+
+    if isinstance(args.exc_value, MKPY_Exception):
+        worker_mkpy_exception = args.exc_value
+    else:
+        tb = trim_library_code_from_traceback(args.exc_traceback)
+        traceback.print_exception(args.exc_type, args.exc_value, tb)
 
 
 def should_run_node_recipe(node: Node):
@@ -213,8 +256,9 @@ def should_run_node_recipe(node: Node):
     for depend in node.depends:
         if Path(depend.name).stat().st_mtime > top_level_timestamp:
             return True
-    
+
     return False
+
 
 def worker_thread(top_level: Node):
     while not has_any_worker_thrown_an_exception:
@@ -238,18 +282,14 @@ def worker_thread(top_level: Node):
         if should_run_node_recipe(next_node):
             next_node.recipe(next_node.name, depends, prerequisites)
 
+            if not next_node.is_phony and not Path(next_node.name).exists():
+                raise PhonyUsageException(next_node.name)
+
         target_states[next_node.name] = MakeState.FINISHED_MAKING
 
 
 def run_make(target_name, job_count):
     graph = generate_dependency_graph(target_name, satisfied_targets=set())
-
-    def except_hook(args):
-        global has_any_worker_thrown_an_exception
-        has_any_worker_thrown_an_exception = True
-        tb = trim_library_code_from_traceback(args.exc_traceback)
-
-        traceback.print_exception(args.exc_type, args.exc_value, tb)
 
     threading.excepthook = except_hook
 
@@ -264,4 +304,4 @@ def run_make(target_name, job_count):
         thread.join()
 
     if has_any_worker_thrown_an_exception:
-        raise MKPY_Exception("Exception thrown in worker")
+        raise worker_mkpy_exception or MKPY_Exception("Exception thrown in worker")
