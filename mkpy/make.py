@@ -8,7 +8,6 @@ from collections import defaultdict
 from enum import Enum
 from functools import partial
 from pathlib import Path
-from threading import Thread
 from typing import Callable, Mapping, NamedTuple
 
 from .util import trim_library_code_from_traceback
@@ -193,13 +192,16 @@ def get_next_node_to_build(top_level: Node):
     return top_level
 
 
+dependency_graph_lock = threading.Lock()
 has_any_worker_thrown_an_exception = False
 
 
 def worker_thread(top_level: Node):
     while not has_any_worker_thrown_an_exception:
         try:
-            next_node = get_next_node_to_build(top_level)
+            with dependency_graph_lock:
+                next_node = get_next_node_to_build(top_level)
+                target_states[next_node.name] = MakeState.CURRENTLY_MAKING
         except MakeBlockedException:
             # Start polling: further work is blocked until another worker finishes
             time.sleep(0)
@@ -207,8 +209,6 @@ def worker_thread(top_level: Node):
         except MakeFinishedException:
             # Terminal case: someone else is dealing with the top_level target
             break
-
-        target_states[next_node.name] = MakeState.CURRENTLY_MAKING
 
         # TODO: check timestamps when appropriate
 
@@ -234,9 +234,9 @@ def run_make(target_name, job_count):
 
     threading.excepthook = except_hook
 
-    thread_pool: list[Thread] = []
+    thread_pool: list[threading.Thread] = []
     for _ in range(job_count):
-        thread_pool.append(Thread(target=partial(worker_thread, graph)))
+        thread_pool.append(threading.Thread(target=partial(worker_thread, graph)))
 
     for thread in thread_pool:
         thread.start()
