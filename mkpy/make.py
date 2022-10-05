@@ -196,6 +196,26 @@ dependency_graph_lock = threading.Lock()
 has_any_worker_thrown_an_exception = False
 
 
+def should_run_node_recipe(node: Node):
+    if node.is_phony:
+        return True
+
+    if not Path(node.name).exists():
+        return True
+
+    if node.is_prerequisite:
+        return False  # Timestamp depends don't matter for prerequisites
+
+    if any(map(lambda depend: depend.is_phony, node.depends)):
+        return True
+
+    top_level_timestamp = Path(node.name).stat().st_mtime
+    for depend in node.depends:
+        if Path(depend.name).stat().st_mtime > top_level_timestamp:
+            return True
+    
+    return False
+
 def worker_thread(top_level: Node):
     while not has_any_worker_thrown_an_exception:
         try:
@@ -210,14 +230,13 @@ def worker_thread(top_level: Node):
             # Terminal case: someone else is dealing with the top_level target
             break
 
-        # TODO: check timestamps when appropriate
-
         def get_node_names(nodes: list[Node]):
             return list(map(lambda node: node.name, nodes))
 
         depends = get_node_names(next_node.depends)
         prerequisites = get_node_names(next_node.prerequisites)
-        next_node.recipe(next_node.name, depends, prerequisites)
+        if should_run_node_recipe(next_node):
+            next_node.recipe(next_node.name, depends, prerequisites)
 
         target_states[next_node.name] = MakeState.FINISHED_MAKING
 
