@@ -113,7 +113,7 @@ def target(
 
     if isinstance(recipe, Iterable):
         for item in recipe:
-            target(item, name, depends, prerequisites, is_phony)
+            single_target(item, name, depends, prerequisites, is_phony)
     else:
         single_target(recipe, name, depends, prerequisites, is_phony)
 
@@ -176,7 +176,7 @@ def generate_dependency_graph(
 
         return Node(
             target_name,
-            rule.requirements.is_phony,
+            False,
             is_prerequisite,
             source_file_recipe,
             [],
