@@ -213,7 +213,7 @@ def get_next_node_to_build(top_level: Node):
             try:
                 return get_next_node_to_build(node)
             except MakeBlockedException:
-                pass
+                waiting_for_depend = True
         if target_states[node.name] == MakeState.CURRENTLY_MAKING:
             waiting_for_depend = True
 
@@ -285,7 +285,8 @@ def worker_thread(top_level: Node):
             if not next_node.is_phony and not Path(next_node.name).exists():
                 raise PhonyUsageException(next_node.name)
 
-        target_states[next_node.name] = MakeState.FINISHED_MAKING
+        with dependency_graph_lock:
+            target_states[next_node.name] = MakeState.FINISHED_MAKING
 
 
 def run_make(target_name, job_count):
