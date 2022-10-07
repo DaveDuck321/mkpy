@@ -90,7 +90,7 @@ def single_target(
     else:
         raise MakefileUsageException(f"Too many arguments for rule body: '{name}'")
 
-    requirements = Requirements([*depends], [*prerequisites], is_phony)
+    requirements = Requirements(depends, prerequisites, is_phony)
     rules.append(Rule(re.compile(name), normalized_recipe, requirements))
 
 
@@ -119,11 +119,20 @@ def target(
 
 
 def target_output(name: str, depends: list[str] = [], prerequisites: list[str] = []):
-    return lambda recipe: target(recipe, name, depends, prerequisites, False)
+    def decorate(recipe: Callable):
+        return target(recipe, name, [*depends], [*prerequisites], False)
+
+    return decorate
 
 
 def target_phony(name: str, depends: list[str] = [], prerequisites: list[str] = []):
-    return lambda recipe: target(recipe, name, depends, prerequisites, True)
+    def decorate(recipe: Callable | None = None):
+        if recipe is None:
+            return target(lambda: None, name, [*depends], [*prerequisites], True)
+        else:
+            return target(recipe, name, [*depends], [*prerequisites], True)
+
+    return decorate
 
 
 def source_file_recipe(target, depends, prerequisites):
